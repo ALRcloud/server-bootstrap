@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ ! -t 0 ]]; then
+  echo "[ERROR] Interactive TTY required. Run as: sudo ./alrcloud-bootstrap.sh"
+  exit 1
+fi
+
 # =========================================================
 # ALRcloud Ubuntu Initial Server Setup
 # =========================================================
