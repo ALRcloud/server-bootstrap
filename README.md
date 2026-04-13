@@ -29,23 +29,12 @@ This project provides a single Bash script to automate first-time server hardeni
 - Run as `root`
 - Internet access for package updates
 
-## Script name
+## Run Command
 
-Recommended filename:
-
-```bash
-alrcloud-bootstrap.sh
-```
-
-## Usage
-
-1. Copy the script to your server.
-2. Make it executable.
-3. Run it as root.
+Execute directly from GitHub:
 
 ```bash
-chmod +x alrcloud-bootstrap.sh
-sudo ./alrcloud-bootstrap.sh
+curl -sSL https://raw.githubusercontent.com/ALRcloud/server-bootstrap/main/alrcloud-bootstrap.sh | sudo bash
 ```
 
 ## Interactive prompts
@@ -87,4 +76,5 @@ The script disables root SSH login and password SSH authentication.
 
 ## License
 
-Choose what fits your project (`MIT` is common for utility scripts).
+This project is licensed under the MIT License.
+See the LICENSE file for full details.
