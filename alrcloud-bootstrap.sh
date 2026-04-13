@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Self-delete on exit only if running from /tmp
+SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || true)"
+if [[ -n "${SCRIPT_PATH}" && -f "${SCRIPT_PATH}" && "${SCRIPT_PATH}" == /tmp/* ]]; then
+  trap 'rm -f -- "${SCRIPT_PATH}"' EXIT
+fi
+
 if [[ ! -t 0 ]]; then
   echo "[ERROR] Interactive TTY required. Run as: sudo ./alrcloud-bootstrap.sh"
   exit 1
