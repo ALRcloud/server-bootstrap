@@ -7,13 +7,15 @@ if [[ -n "${SCRIPT_PATH}" && -f "${SCRIPT_PATH}" && "${SCRIPT_PATH}" == /tmp/* ]
   trap 'rm -f -- "${SCRIPT_PATH}"' EXIT
 fi
 
-if [[ ! -t 0 ]]; then
-  echo "[ERROR] Interactive TTY required. Run as: sudo ./alrcloud-bootstrap.sh"
+# Allow interactive prompts even when executed via curl | bash
+if [[ ! -r /dev/tty ]]; then
+  echo "[ERROR] Interactive terminal required. Please run from a TTY-enabled shell."
   exit 1
 fi
 
 # =========================================================
 # ALRcloud Ubuntu Initial Server Setup
+# Supports interactive execution via: curl ... | sudo bash
 # =========================================================
 
 # ---------- Colors ----------
@@ -28,6 +30,10 @@ info()  { echo -e "${BLUE}[ALRcloud]${NC} $*"; }
 ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; }
+
+# Read from /dev/tty so prompts work even with curl | bash
+prompt() { local __var="$1" __msg="$2"; read -r -p "$__msg" "$__var" < /dev/tty; }
+prompt_secret() { local __var="$1" __msg="$2"; read -r -s -p "$__msg" "$__var" < /dev/tty; echo; }
 
 show_banner() {
   clear
@@ -48,7 +54,13 @@ EOF
 show_banner
 
 if [[ "${EUID}" -ne 0 ]]; then
-  error "Please run this script as root."
+  error "Please run this script as root (or with sudo)."
+  exit 1
+fi
+
+# Ensure we have a terminal for prompts
+if [[ ! -r /dev/tty ]]; then
+  error "No interactive terminal detected. Please run from a shell with TTY."
   exit 1
 fi
 
@@ -57,40 +69,48 @@ info "Welcome to ALRcloud initial Ubuntu setup."
 echo
 
 # ---------- User input ----------
-read -r -p "Enter new username: " NEW_USER
+NEW_USER=""
 while [[ -z "${NEW_USER}" ]]; do
-  read -r -p "Username cannot be empty. Enter new username: " NEW_USER
+  prompt NEW_USER "Enter new username: "
 done
 
-read -r -p "Enter full name for ${NEW_USER}: " FULL_NAME
+FULL_NAME=""
 while [[ -z "${FULL_NAME}" ]]; do
-  read -r -p "Full name cannot be empty. Enter full name: " FULL_NAME
+  prompt FULL_NAME "Enter full name for ${NEW_USER}: "
 done
 
-read -r -s -p "Enter password for ${NEW_USER}: " USER_PASS
-echo
-read -r -s -p "Confirm password for ${NEW_USER}: " USER_PASS_CONFIRM
-echo
+USER_PASS=""
+USER_PASS_CONFIRM=""
+prompt_secret USER_PASS "Enter password for ${NEW_USER}: "
+prompt_secret USER_PASS_CONFIRM "Confirm password for ${NEW_USER}: "
 if [[ "${USER_PASS}" != "${USER_PASS_CONFIRM}" ]]; then
   error "Passwords do not match."
   exit 1
 fi
 
-read -r -p "Paste SSH public key for ${NEW_USER}: " PUBKEY
+PUBKEY=""
 while [[ -z "${PUBKEY}" ]]; do
-  read -r -p "Public key cannot be empty. Paste SSH public key: " PUBKEY
+  prompt PUBKEY "Paste SSH public key for ${NEW_USER}: "
 done
 
-read -r -p "Enter swap size in GB (example: 2): " SWAP_GB
-if ! [[ "${SWAP_GB}" =~ ^[0-9]+$ ]] || [[ "${SWAP_GB}" -eq 0 ]]; then
-  error "Swap size must be a positive integer."
+SWAP_INPUT=""
+prompt SWAP_INPUT "Enter swap size in GB (example: 2, 2G or 2GB): "
+SWAP_INPUT="${SWAP_INPUT^^}"
+SWAP_INPUT="${SWAP_INPUT//[[:space:]]/}"
+SWAP_INPUT="${SWAP_INPUT%GB}"
+SWAP_INPUT="${SWAP_INPUT%G}"
+
+if ! [[ "${SWAP_INPUT}" =~ ^[0-9]+$ ]] || [[ "${SWAP_INPUT}" -eq 0 ]]; then
+  error "Swap size must be a positive integer (examples: 2, 2G, 2GB)."
   exit 1
 fi
+SWAP_GB="${SWAP_INPUT}"
 
 echo
 warn "This will disable root SSH login and password SSH authentication."
 warn "Ensure your SSH key is correct before continuing."
-read -r -p "Continue? (yes/no): " CONFIRM
+CONFIRM=""
+prompt CONFIRM "Continue? (yes/no): "
 if [[ "${CONFIRM}" != "yes" ]]; then
   warn "Setup aborted by user."
   exit 0
@@ -151,7 +171,7 @@ ok "User added to sudo group."
 info "Setting up SSH authorized_keys for ${NEW_USER}..."
 install -d -m 700 -o "${NEW_USER}" -g "${NEW_USER}" "/home/${NEW_USER}/.ssh"
 printf "%s\n" "${PUBKEY}" > "/home/${NEW_USER}/.ssh/authorized_keys"
-chmod 700 -R "/home/${NEW_USER}/.ssh"
+chmod -R 700 "/home/${NEW_USER}/.ssh"
 chmod 600 "/home/${NEW_USER}/.ssh/authorized_keys"
 chown -R "${NEW_USER}:${NEW_USER}" "/home/${NEW_USER}"
 ok "SSH key configured."
@@ -181,7 +201,11 @@ else
 fi
 shopt -u nullglob
 
-service ssh restart
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl restart ssh || service ssh restart
+else
+  service ssh restart
+fi
 ok "SSH hardened and restarted."
 
 # ---------- Swap ----------
@@ -209,7 +233,8 @@ ok "ALRcloud setup completed successfully."
 echo
 
 # ---------- Reboot prompt ----------
-read -r -p "Do you want to reboot now to apply all changes? (yes/no): " REBOOT_NOW
+REBOOT_NOW=""
+prompt REBOOT_NOW "Do you want to reboot now to apply all changes? (yes/no): "
 if [[ "${REBOOT_NOW}" == "yes" ]]; then
   info "Rebooting now..."
   reboot
